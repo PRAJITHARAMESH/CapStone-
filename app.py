@@ -1,73 +1,58 @@
-from flask import Flask, render_template, request, send_from_directory
+from flask import Flask, render_template, request
 import pandas as pd
-import os
-import datetime
+import numpy as np
+import joblib
+from sklearn.preprocessing import StandardScaler
 
 app = Flask(__name__)
 
-# Downloads folder create
-DOWNLOAD_FOLDER = "downloads"
-os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
-
-# Calculation function
-def calculate_heat_transfer(thermal_cond, ambient_temp, source_temp, block_size):
-    max_temp = source_temp
-    avg_temp = (source_temp + ambient_temp) / 2
-    center_temp = (source_temp + ambient_temp) / 2.5
-    efficiency = ((max_temp - avg_temp) / max_temp) * 100
-
-    # Status & coolant/material suggestion
-    if efficiency > 60 or max_temp > 300:
-        status = "Danger – Coolant Required!"
-        coolant = "Water-Glycol Mix"
-        material = "Copper"
-    elif efficiency > 40:
-        status = "Moderate – Consider Coolant"
-        coolant = "Mineral Oil"
-        material = "Aluminium"
-    else:
-        status = "Normal – No Coolant Needed"
-        coolant = "None"
-        material = "Aluminium"
-
-    return {
-        "max_temp": round(max_temp, 2),
-        "avg_temp": round(avg_temp, 2),
-        "center_temp": round(center_temp, 2),
-        "efficiency": round(efficiency, 2),
-        "status": status,
-        "coolant": coolant,
-        "material": material
-    }
+# Load model and scaler
+model = joblib.load("model.pkl")
+scaler = joblib.load("scaler.pkl")
 
 @app.route('/')
 def index():
-    return render_template("index.html")
+    return render_template('index.html')
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    thermal_cond = float(request.form['thermal_cond'])
-    ambient_temp = float(request.form['ambient_temp'])
-    source_temp = float(request.form['source_temp'])
-    block_size = float(request.form['block_size'])
+    try:
+        # Get input values from form
+        thermal_cond = float(request.form['thermal_cond'])
+        block_size = float(request.form['block_size'])
+        source_temp = float(request.form['source_temp'])
+        ambient_temp = float(request.form['ambient_temp'])
 
-    # Limits check
-    if thermal_cond > 500 or ambient_temp > 100 or source_temp > 1000 or block_size > 100:
-        return "⚠ Input values exceed limit! Please enter within allowed range."
+        # Prepare input array
+        input_data = np.array([[thermal_cond, block_size, source_temp, ambient_temp]])
+        scaled_data = scaler.transform(input_data)
 
-    result = calculate_heat_transfer(thermal_cond, ambient_temp, source_temp, block_size)
+        # Make prediction
+        prediction = model.predict(scaled_data)
 
-    # Save result to CSV for download
-    df = pd.DataFrame([result])
-    filename = f"heat_result_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    filepath = os.path.join(DOWNLOAD_FOLDER, filename)
-    df.to_csv(filepath, index=False)
+        # Example logic for efficiency and suggestions
+        efficiency = prediction[0]
+        if efficiency > 70:
+            status = "Good performance"
+            suggestion = "No cooling needed."
+        elif efficiency > 50:
+            status = "Average performance"
+            suggestion = "Consider adding a cooling mechanism."
+        else:
+            status = "Poor performance"
+            suggestion = "Add a high-efficiency cooling system."
 
-    return render_template("result.html", result=result, download_filename=filename)
+        return render_template(
+            'result.html',
+            efficiency=round(efficiency, 2),
+            status=status,
+            suggestion=suggestion
+        )
 
-@app.route('/download/<filename>')
-def download_file(filename):
-    return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=True)
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
