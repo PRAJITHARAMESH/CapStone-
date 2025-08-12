@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heat Transfer Prediction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Heat Transfer Prediction</h1>
+        <form action="/predict" method="post">
+            <label>Thermal Conductivity (W/m·K)</label>
+            <input type="number" name="thermal_cond" step="0.01" min="1" max="500" required>
+
+            <label>Ambient Temperature (°C)</label>
+            <input type="number" name="ambient_temp" step="0.1" min="-50" max="100" required>
+
+            <label>Source Temperature (°C)</label>
+            <input type="number" name="source_temp" step="0.1" min="0" max="1000" required>
+
+            <label>Block Size (cm)</label>
+            <input type="number" name="block_size" step="0.1" min="1" max="100" required>
+
+            <button type="submit">Predict</button>
+        </form>
+    </div>
+</body>
+</html>
