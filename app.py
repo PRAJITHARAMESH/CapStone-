@@ -1,58 +1,53 @@
-from flask import Flask, render_template, request
-import pandas as pd
-import numpy as np
+import os
 import joblib
-from sklearn.preprocessing import StandardScaler
+import numpy as np
+from flask import Flask, render_template, request
 
+# Flask app
 app = Flask(__name__)
 
-# Load model and scaler
+# Load model & scaler
 model = joblib.load("model.pkl")
 scaler = joblib.load("scaler.pkl")
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+def suggest_coolant_and_material(efficiency):
+    if efficiency > 80:
+        return "Coolant Not Needed", "Aluminium"
+    elif efficiency > 60:
+        return "Use Water-Based Coolant", "Copper"
+    else:
+        return "Use Ethylene Glycol Coolant", "High Thermal Conductivity Alloy"
 
-@app.route('/predict', methods=['POST'])
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+@app.route("/predict", methods=["POST"])
 def predict():
     try:
-        # Get input values from form
         thermal_cond = float(request.form['thermal_cond'])
         block_size = float(request.form['block_size'])
         source_temp = float(request.form['source_temp'])
         ambient_temp = float(request.form['ambient_temp'])
 
-        # Prepare input array
+        # Prepare & scale
         input_data = np.array([[thermal_cond, block_size, source_temp, ambient_temp]])
-        scaled_data = scaler.transform(input_data)
+        input_scaled = scaler.transform(input_data)
 
-        # Make prediction
-        prediction = model.predict(scaled_data)
+        # Prediction
+        prediction = model.predict(input_scaled)[0]
+        efficiency = max(0, min(100, 100 - abs(prediction)))
 
-        # Example logic for efficiency and suggestions
-        efficiency = prediction[0]
-        if efficiency > 70:
-            status = "Good performance"
-            suggestion = "No cooling needed."
-        elif efficiency > 50:
-            status = "Average performance"
-            suggestion = "Consider adding a cooling mechanism."
-        else:
-            status = "Poor performance"
-            suggestion = "Add a high-efficiency cooling system."
+        coolant, material = suggest_coolant_and_material(efficiency)
 
-        return render_template(
-            'result.html',
-            efficiency=round(efficiency, 2),
-            status=status,
-            suggestion=suggestion
-        )
-
+        return render_template("result.html",
+                               prediction=round(prediction, 2),
+                               efficiency=round(efficiency, 2),
+                               coolant=coolant,
+                               material=material)
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error: {e}"
 
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
